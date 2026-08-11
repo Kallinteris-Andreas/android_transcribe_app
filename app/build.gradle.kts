@@ -115,13 +115,10 @@ val cargoNdkBuild by tasks.registering(Exec::class) {
     // platform detection needs one of these (ANDROID_NDK_HOME is not enough).
     environment("ANDROID_NDK_ROOT", ndkDir)
     environment("ANDROID_NDK", ndkDir)
-    // ggml cannot autodetect the CPU when cross-compiling and falls back to
-    // baseline armv8-a, losing the dotprod/fp16 kernels its quantized matmuls
-    // rely on (several times slower). armv8.2-a+dotprod+fp16 is supported by
-    // arm64 phones from ~2018 on; the engine refuses older CPUs with a clear
-    // error at load (see check_cpu_features in src/engine.rs) instead of
-    // crashing mid-inference.
-    environment("TRANSCRIBE_CMAKE_ARGS", "-DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16")
+    // Build ggml's Arm CPU variants as separate modules. Its baseline-safe
+    // feature probes select the fastest compatible module at runtime, from
+    // Armv8-A through dotprod/fp16 and newer ISA tiers.
+    environment("TRANSCRIBE_CMAKE_ARGS", "-DGGML_CPU_ALL_VARIANTS=ON")
 
     val jniLibsDir = project.file("src/main/jniLibs")
 
@@ -136,11 +133,26 @@ val cargoNdkBuild by tasks.registering(Exec::class) {
     doLast {
         val ndkPath = environment["ANDROID_NDK_HOME"] as String
         val libcpp = file("$ndkPath/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so")
+        val destDir = File(jniLibsDir, "arm64-v8a")
+        val runtimeLibDir = rootProject.file("target/aarch64-linux-android/release/build")
+            .walkTopDown()
+            .firstOrNull {
+                it.isDirectory && it.name == "lib" && it.parentFile.name == "out" &&
+                    it.parentFile.parentFile.name.startsWith("transcribe-cpp-sys-")
+            }
+            ?: throw GradleException("transcribe runtime library directory was not built")
+        val runtimeLibs = runtimeLibDir.listFiles { file -> file.extension == "so" }?.toList().orEmpty()
+        copy {
+            from(runtimeLibs)
+            into(destDir)
+        }
+        if (!File(destDir, "libggml-cpu-android_armv8.0_1.so").exists()) {
+            throw GradleException("Armv8-A ggml runtime module was not built")
+        }
         if (libcpp.exists()) {
-            val destDir = File(jniLibsDir, "arm64-v8a")
             destDir.mkdirs()
             libcpp.copyTo(File(destDir, "libc++_shared.so"), overwrite = true)
-            println("Copied libc++_shared.so from NDK")
+            println("Copied ${runtimeLibs.size} transcribe runtime libraries and libc++_shared.so")
         } else {
             throw GradleException("libc++_shared.so not found in NDK at: ${libcpp.absolutePath}")
         }

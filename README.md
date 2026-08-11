@@ -18,6 +18,7 @@ height="80">](https://play.google.com/store/apps/details?id=dev.notune.transcrib
 - **Supported Languages:** Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Slovak, Slovenian, Spanish, Swedish, Russian, Ukrainian.
 - **Custom models:** Import any [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp) GGUF model (Whisper, Nemotron streaming, Canary, more Parakeet variants, …) from a downloaded file — the app stays fully offline; downloads happen in your browser.
 - **Efficient native backend:** All models run through [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp) (ggml), wrapped in a safe Rust core.
+- **Runtime CPU dispatch:** The APK includes a baseline Armv8-A path plus optimized dot-product/FP16 and newer Arm kernels, selecting the fastest compatible path on-device.
 
 ## Screenshots
 

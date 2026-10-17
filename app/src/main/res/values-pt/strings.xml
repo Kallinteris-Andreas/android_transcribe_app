@@ -9,6 +9,7 @@
 
     <string name="section_subs">Legendas ao vivo</string>
     <string name="desc_subs">Exiba legendas para qualquer áudio reproduzido no seu dispositivo. Após iniciar, escolha \'Compartilhar a tela inteira\' para melhores resultados.</string>
+    <string name="subs_unsupported">As legendas ao vivo precisam do Android 10 ou mais recente: versões anteriores não permitem que apps capturem o áudio de outros apps.</string>
     <string name="btn_subs_start">Iniciar legendas ao vivo</string>
     <string name="btn_subs_advanced">Pular a caixa de permissão (avançado)</string>
     <string name="subs_advanced_title">Pular a caixa de captura de tela</string>
@@ -51,10 +52,10 @@
     <string name="model_desc_sensevoice">Inglês, chinês, cantonês, japonês, coreano; rápido</string>
     <string name="model_desc_whisper_small">99 idiomas, compacto; traduz para o inglês</string>
     <string name="model_desc_nemotron">40 idiomas incl. chinês, japonês, coreano, árabe, híndi; com pontuação</string>
-    <string name="model_desc_parakeet_v3_q8">Como o modelo integrado, maior precisão</string>
+    <string name="model_desc_parakeet_v3_q8">Parakeet TDT 0.6B v3 com maior precisão</string>
     <string name="model_desc_whisper_turbo">99 idiomas, o mais preciso desta lista; não traduz</string>
     <string name="model_desc_browse">Ver todos os modelos transcribe.cpp</string>
-    <string name="models_desc">O modelo integrado funciona imediatamente. Você também pode importar qualquer modelo GGUF do transcribe.cpp que tenha baixado. O app permanece totalmente offline; os downloads acontecem no seu navegador. O teclado de voz aplica uma troca de modelo após reiniciar.</string>
+    <string name="models_desc">O modelo integrado funciona imediatamente. Você também pode importar qualquer modelo GGUF do transcribe.cpp que tenha baixado. O app permanece totalmente offline; os downloads acontecem no seu navegador.</string>
     <string name="models_loading">Carregando modelo…</string>
     <string name="models_import">Importar arquivo de modelo (.gguf)</string>
     <string name="models_importing">Importando %1$s…</string>
@@ -69,7 +70,7 @@
     <string name="models_delete">Excluir modelo</string>
     <string name="models_delete_confirm">Excluir %1$s do armazenamento do app?</string>
     <string name="models_language_section">Idioma</string>
-    <string name="models_language_desc">O idioma passado ao modelo. «Automático» deixa o modelo decidir. Se a fala for transcrita no idioma ou alfabeto errado, escolha seu idioma explicitamente. Idiomas não suportados pelo modelo ativo são ignorados.</string>
+    <string name="models_language_desc">O idioma passado ao modelo. «Automático» deixa o modelo decidir. O Whisper e outros modelos aos quais se pode indicar o idioma o respeitam; os modelos Parakeet sempre detectam o idioma sozinhos e ignoram esta configuração. Idiomas não suportados pelo modelo ativo são ignorados.</string>
     <string name="models_language_auto">Automático</string>
     <string name="models_language_saved">Idioma salvo</string>
     <string name="models_translate">Traduzir para inglês</string>
@@ -78,6 +79,18 @@
     <string name="models_threads_section">Threads da CPU</string>
     <string name="models_threads_desc">Threads usadas na transcrição. “Automático” escolhe um valor conforme a CPU deste aparelho. Se a transcrição estiver lenta, teste outros valores; mais threads nem sempre é mais rápido.</string>
     <string name="models_threads_auto">Automático</string>
+    <!-- No model available (F-Droid builds start without one) -->
+    <string name="no_model_title">Nenhum modelo de voz instalado</string>
+    <string name="no_model_main">A entrada de voz, as legendas ao vivo e a transcrição de arquivos precisam de um modelo de voz. Toque em «Adicionar um modelo de voz» para baixar um no navegador e importá-lo.</string>
+    <string name="no_model_steps">1. Toque em «Baixar modelo recomendado». Seu navegador baixa o Parakeet TDT 0.6B v3 (485 MB, 25 idiomas europeus).\n2. Quando o download terminar, toque em «Importar arquivo de modelo» abaixo e escolha o arquivo .gguf baixado (geralmente em Downloads).\n\nO app em si permanece offline; só o navegador baixa o arquivo. Depois de importar, você pode apagá-lo dos Downloads.</string>
+    <string name="btn_download_recommended">Baixar modelo recomendado (485 MB)</string>
+    <string name="btn_add_model">Adicionar um modelo de voz</string>
+    <string name="models_desc_no_builtin">Importe qualquer modelo GGUF do transcribe.cpp que você tenha baixado. O app permanece totalmente offline; os downloads acontecem no seu navegador.</string>
+    <string name="model_desc_recommended">Recomendado · 25 idiomas europeus, rápido e preciso</string>
+    <string name="voice_status_need_model">É necessário um modelo de voz para a entrada de voz.</string>
+    <string name="no_model_short">Nenhum modelo de voz instalado. Abra o Offline Voice Input para adicionar um.</string>
+    <string name="voice_no_model">Ainda não há modelo de voz instalado. Toque aqui para adicionar um.</string>
+    <string name="ime_no_model_hint">Abra o app para adicionar um</string>
 
     <string name="section_benchmark">Teste de desempenho</string>
     <string name="desc_benchmark">Mede a velocidade de transcrição do modelo ativo neste aparelho usando uma gravação de teste em inglês integrada (11 s).</string>
@@ -105,4 +118,38 @@
 
     <string name="voice_help_title">Configuração da entrada de voz</string>
     <string name="voice_help_body">Como usar\n• Abra qualquer app e toque no microfone de um teclado/app compatível. Um pequeno painel aparece, você fala, toca para parar, e o texto é inserido. (Ative «Parada automática após silêncio» nas configurações para que pare sozinho.)\n\nQuais teclados abrem o painel de voz\n• O Microsoft SwiftKey (não é de código aberto) e a busca por voz de sites abrem o painel diretamente.\n• O AnySoftKeyboard é o caminho de código aberto para o painel: sua tecla de microfone o abre desde que nenhum teclado de voz esteja ativado no sistema.\n\nOutros teclados de código aberto\n• HeliBoard, FlorisBoard, OpenBoard, Fossify Keyboard e Unexpected Keyboard não abrem o painel: a tecla de microfone deles alterna para o teclado «Offline Voice Input». Ative-o uma vez (veja «Alternativa: teclado de voz»), fale lá e volte com a tecla de troca de teclado. O FUTO Keyboard traz sua própria entrada de voz.\n• O Gboard só usa a entrada de voz do Google e não pode usar este app de forma alguma.\n\nSe a entrada de voz do próprio SwiftKey abrir\n• Configurações → Entrada avançada → desative «Entrada de voz multimodal».\n• Depois toque no microfone novamente e escolha «Offline Voice Input».\n\nSe o Android perguntar qual app usar\n• Escolha «Offline Voice Input» e toque em «Sempre».\n\nSe outro app sempre abrir\n• Abra Configurações → Apps → esse app → «Abrir por padrão» → Limpar padrões, e tente novamente.</string>
+
+    <!-- Voice panel, keyboard, file transcription and live subtitles -->
+    <string name="voice_listening">Ouvindo… (toque para parar)</string>
+    <string name="voice_no_speech">Nenhuma fala reconhecida</string>
+    <string name="voice_processing">Processando…</string>
+    <string name="voice_need_mic">Permissão de microfone necessária.\nConceda-a no app.</string>
+    <string name="ime_tap_to_record">Toque para gravar</string>
+    <string name="ime_tap_to_stop">Toque para parar</string>
+    <string name="ime_listening">Ouvindo…</string>
+    <string name="ime_need_mic">Sem permissão de microfone</string>
+    <string name="ime_need_mic_hint">Abra o app para concedê-la</string>
+    <string name="ime_switch_keyboard">Trocar teclado</string>
+    <string name="ime_space">Espaço</string>
+    <string name="ime_enter">Enter</string>
+    <string name="ime_backspace">Apagar</string>
+    <string name="action_close">Fechar</string>
+    <string name="file_preparing">Preparando…</string>
+    <string name="file_decoding">Decodificando áudio…</string>
+    <string name="file_transcribing">Transcrevendo…</string>
+    <string name="file_transcribing_progress">Transcrevendo… %1$s / %2$s</string>
+    <string name="file_transcribing_at">Transcrevendo… %1$s</string>
+    <string name="file_copy">Copiar para a área de transferência</string>
+    <string name="file_copied">Copiado para a área de transferência</string>
+    <string name="file_copied_auto">Transcrição copiada para a área de transferência</string>
+    <string name="file_no_audio">Nenhum arquivo de áudio recebido</string>
+    <string name="file_decode_error">Não foi possível decodificar este arquivo de áudio</string>
+    <string name="file_no_speech">Nenhuma fala reconhecida neste arquivo</string>
+    <string name="subs_waiting">Aguardando áudio…</string>
+    <string name="subs_notification_title">Legendas ao vivo ativas</string>
+    <string name="subs_notification_text">Legendando o áudio reproduzido neste dispositivo</string>
+    <string name="subs_stop">Parar</string>
+    <string name="subs_grant_overlay">Permita “Sobrepor a outros apps”</string>
+    <string name="subs_overlay_required">As legendas ao vivo precisam da permissão “Sobrepor a outros apps”</string>
+    <string name="subs_capture_denied">A captura de tela foi negada</string>
 </resources>

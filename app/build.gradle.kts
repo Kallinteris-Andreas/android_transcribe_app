@@ -5,18 +5,36 @@ plugins {
     id("com.android.application")
 }
 
+// ABIs to build native code for. Releases ship arm64 only; pass e.g.
+// -PtargetAbis=x86_64 (comma-separated) to run on an x86_64 emulator.
+val targetAbis = (project.findProperty("targetAbis") as String? ?: "arm64-v8a")
+    .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
 android {
     namespace = "dev.notune.transcribe"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.notune.transcribe"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 19
-        versionName = "0.1.18"
+        targetSdk = 36
+        versionCode = 22
+        versionName = "0.2.2"
         ndk {
-            abiFilters += "arm64-v8a"
+            abiFilters += targetAbis
+        }
+    }
+
+    // "standard" (GitHub releases, Google Play) ships the Parakeet model;
+    // "fdroid" is the same app without it: F-Droid builds everything from
+    // source, so users import a model they downloaded in their browser.
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("standard") {
+            dimension = "distribution"
+        }
+        create("fdroid") {
+            dimension = "distribution"
         }
     }
 
@@ -59,7 +77,8 @@ android {
     }
 
     // Play Asset Delivery: large model files go into a separate asset pack
-    // so the base module stays under the 200 MB Play Store limit.
+    // so the base module stays under the 200 MB Play Store limit. Only the
+    // standard flavor is built as a bundle.
     assetPacks += listOf(":model_assets")
 }
 
@@ -71,11 +90,8 @@ val isBundle = gradle.startParameter.taskNames.any {
     it.contains("bundle", ignoreCase = true)
 }
 if (!isBundle) {
-    android.sourceSets.getByName("main") {
-        assets.srcDirs(
-            "src/main/assets",
-            rootProject.file("model_assets/src/main/assets")
-        )
+    android.sourceSets.getByName("standard") {
+        assets.srcDirs(rootProject.file("model_assets/src/main/assets"))
     }
 }
 
@@ -103,7 +119,7 @@ val ndkDir = project.findProperty("ndk.dir")?.toString()
     ?: System.getenv("ANDROID_NDK")
     ?: android.ndkDirectory.absolutePath
 
-fun nativeVariant(name: String, armArch: String) = tasks.register<Exec>("cargoNdkBuild$name") {
+fun nativeVariant(name: String, armArch: String, abis: List<String>) = tasks.register<Exec>("cargoNdkBuild$name") {
     description = "Build the $name Rust native backend via cargo-ndk"
     group = "build"
     workingDir = rootProject.projectDir
@@ -116,17 +132,17 @@ fun nativeVariant(name: String, armArch: String) = tasks.register<Exec>("cargoNd
 
     val output = layout.buildDirectory.dir("jni-$name").get().asFile
     commandLine(
-        "cargo", "ndk",
-        "-t", "arm64-v8a",
-        "-o", output.absolutePath,
-        "build", "--release"
+        listOf("cargo", "ndk") +
+            abis.flatMap { listOf("-t", it) } +
+            listOf("-o", output.absolutePath, "build", "--release")
     )
+    onlyIf { abis.isNotEmpty() }
     outputs.dir(output)
     outputs.upToDateWhen { false }
 }
 
-val cargoNdkBuildArmv8 = nativeVariant("Armv8", "armv8-a")
-val cargoNdkBuildDotprod = nativeVariant("Dotprod", "armv8.2-a+dotprod+fp16")
+val cargoNdkBuildArmv8 = nativeVariant("Armv8", "armv8-a", targetAbis)
+val cargoNdkBuildDotprod = nativeVariant("Dotprod", "armv8.2-a+dotprod+fp16", targetAbis.filter { it == "arm64-v8a" })
 
 val cargoNdkBuild by tasks.registering {
     description = "Build and package both native CPU backends"
@@ -134,24 +150,32 @@ val cargoNdkBuild by tasks.registering {
     dependsOn(cargoNdkBuildArmv8, cargoNdkBuildDotprod)
 
     doLast {
-        val destDir = project.file("src/main/jniLibs/arm64-v8a")
-        destDir.mkdirs()
-        copy {
-            from(layout.buildDirectory.file("jni-Armv8/arm64-v8a/libandroid_transcribe_app.so"))
-            into(destDir)
-            rename { "libandroid_transcribe_app_armv8.so" }
+        val triples = mapOf("arm64-v8a" to "aarch64-linux-android", "x86_64" to "x86_64-linux-android")
+        targetAbis.forEach { abi ->
+            val triple = triples[abi] ?: throw GradleException("Unsupported ABI: $abi")
+            val libcpp = file("$ndkDir/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$triple/libc++_shared.so")
+            if (!libcpp.exists()) {
+                throw GradleException("libc++_shared.so not found in NDK at: ${libcpp.absolutePath}")
+            }
+            val destDir = project.file("src/main/jniLibs/$abi")
+            destDir.mkdirs()
+            copy {
+                from(layout.buildDirectory.file("jni-Armv8/$abi/libandroid_transcribe_app.so"))
+                into(destDir)
+                if (abi == "arm64-v8a") {
+                    rename { "libandroid_transcribe_app_armv8.so" }
+                }
+            }
+            if (abi == "arm64-v8a") {
+                copy {
+                    from(layout.buildDirectory.file("jni-Dotprod/$abi/libandroid_transcribe_app.so"))
+                    into(destDir)
+                    rename { "libandroid_transcribe_app_dotprod.so" }
+                }
+            }
+            libcpp.copyTo(File(destDir, "libc++_shared.so"), overwrite = true)
+            println("Copied libc++_shared.so ($abi) from NDK")
         }
-        copy {
-            from(layout.buildDirectory.file("jni-Dotprod/arm64-v8a/libandroid_transcribe_app.so"))
-            into(destDir)
-            rename { "libandroid_transcribe_app_dotprod.so" }
-        }
-
-        val libcpp = file("$ndkDir/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so")
-        if (!libcpp.exists()) {
-            throw GradleException("libc++_shared.so not found in NDK at: ${libcpp.absolutePath}")
-        }
-        libcpp.copyTo(File(destDir, "libc++_shared.so"), overwrite = true)
     }
 }
 
@@ -246,6 +270,7 @@ val downloadModels by tasks.registering {
     }
 }
 
-tasks.named("preBuild") {
+// Only the standard flavor bundles the model; fdroid builds never download it.
+tasks.matching { it.name.matches(Regex("preStandard\\w*Build")) }.configureEach {
     dependsOn(downloadModels)
 }

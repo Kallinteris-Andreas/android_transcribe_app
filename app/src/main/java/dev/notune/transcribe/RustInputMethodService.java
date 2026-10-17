@@ -9,7 +9,9 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.ProgressBar;
+import android.os.Build;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.util.Log;
 import android.content.Context;
@@ -97,10 +99,10 @@ public class RustInputMethodService extends InputMethodService {
     public View onCreateInputView() {
         Log.d(TAG, "onCreateInputView");
         try {
-            // The IME is a non-AppCompat Service in a separate process, so
-            // AppCompat's delegate can't theme it. Build a context that is
-            // night-aware (per the saved preference), wears the Material 3 theme,
-            // and picks up Material You dynamic color — matching the app.
+            // The IME is a non-AppCompat Service, so AppCompat's delegate can't
+            // theme it. Build a context that is night-aware (per the saved
+            // preference), wears the Material 3 theme, and picks up Material
+            // You dynamic color — matching the app.
             Context night = ThemePrefs.wrapForNight(this, ThemePrefs.getMode(this));
             viewIsNight = ThemePrefs.isNight(night);
             Context themed = DynamicColors.wrapContextIfAvailable(
@@ -108,11 +110,17 @@ public class RustInputMethodService extends InputMethodService {
             View view = LayoutInflater.from(themed).inflate(R.layout.ime_layout, null);
             inputView = view;
 
-            // Handle window insets for avoiding navigation bar overlap
+            // Keep the keys above the navigation bar: pad the bottom by its
+            // height. When the keyboard starts cold, Android 16 can size the
+            // window from a layout pass that ran before these insets arrived and
+            // keep that size, cutting off the bottom row; lay out again once the
+            // padding changes so the window grows to fit it.
             view.setOnApplyWindowInsetsListener((v, insets) -> {
-                int paddingBottom = insets.getSystemWindowInsetBottom();
-                int originalPaddingBottom = v.getPaddingTop();
-                v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), originalPaddingBottom + paddingBottom);
+                int paddingBottom = v.getPaddingTop() + insets.getSystemWindowInsetBottom();
+                if (v.getPaddingBottom() != paddingBottom) {
+                    v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), paddingBottom);
+                    v.post(v::requestLayout);
+                }
                 return insets;
             });
 
@@ -131,10 +139,9 @@ public class RustInputMethodService extends InputMethodService {
             switchKeyboardButton.setOnClickListener(v -> {
                 if (isRecording) {
                     pendingSwitchBack = true;
-                    stopRecording();
-                    updateRecordButtonUI(false);
+                    finishCapture();
                 } else {
-                    switchToPreviousInputMethod();
+                    switchAwayFromVoiceKeyboard();
                 }
             });
 
@@ -142,11 +149,7 @@ public class RustInputMethodService extends InputMethodService {
             backspaceRepeatRunnable = new Runnable() {
                 @Override
                 public void run() {
-                    InputConnection ic = getCurrentInputConnection();
-                    if (ic != null) {
-                        ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DEL));
-                        ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DEL));
-                    }
+                    deleteBackward();
                     mainHandler.postDelayed(this, REPEAT_INTERVAL);
                 }
             };
@@ -155,22 +158,18 @@ public class RustInputMethodService extends InputMethodService {
             spaceRepeatRunnable = new Runnable() {
                 @Override
                 public void run() {
-                    InputConnection ic = getCurrentInputConnection();
-                    if (ic != null) {
-                        ic.commitText(" ", 1);
-                    }
+                    insertSpace();
                     mainHandler.postDelayed(this, REPEAT_INTERVAL);
                 }
             };
 
+            // Touch drives the key repeat; the click listeners serve
+            // activation without touch (TalkBack, Switch Access, Voice Access),
+            // which calls performClick and never sends touch events.
             backspaceButton.setOnTouchListener((v, event) -> {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        InputConnection ic = getCurrentInputConnection();
-                        if (ic != null) {
-                            ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DEL));
-                            ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DEL));
-                        }
+                        deleteBackward();
                         mainHandler.postDelayed(backspaceRepeatRunnable, REPEAT_INITIAL_DELAY);
                         return true;
                     case MotionEvent.ACTION_UP:
@@ -180,14 +179,12 @@ public class RustInputMethodService extends InputMethodService {
                 }
                 return false;
             });
+            backspaceButton.setOnClickListener(v -> deleteBackward());
 
             spaceButton.setOnTouchListener((v, event) -> {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        InputConnection ic = getCurrentInputConnection();
-                        if (ic != null) {
-                            ic.commitText(" ", 1);
-                        }
+                        insertSpace();
                         mainHandler.postDelayed(spaceRepeatRunnable, REPEAT_INITIAL_DELAY);
                         return true;
                     case MotionEvent.ACTION_UP:
@@ -197,6 +194,7 @@ public class RustInputMethodService extends InputMethodService {
                 }
                 return false;
             });
+            spaceButton.setOnClickListener(v -> insertSpace());
 
             enterButton.setOnClickListener(v -> {
                 InputConnection ic = getCurrentInputConnection();
@@ -233,18 +231,18 @@ public class RustInputMethodService extends InputMethodService {
                 // Check microphone permission
                 if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
                         != PackageManager.PERMISSION_GRANTED) {
-                    if (statusView != null) statusView.setText("No mic permission - grant in app");
-                    if (hintView != null) hintView.setText("Open the app to grant permission");
+                    if (statusView != null) statusView.setText(R.string.ime_need_mic);
+                    if (hintView != null) hintView.setText(R.string.ime_need_mic_hint);
+                    return;
+                }
+
+                if (!isRecording && !ModelStore.hasAnyModel(this)) {
+                    updateUiState();
                     return;
                 }
 
                 if (isRecording) {
-                    stopRecording();
-                    if (pauseAudioActive) {
-                        audioPauser.abandon(this);
-                        pauseAudioActive = false;
-                    }
-                    updateRecordButtonUI(false);
+                    finishCapture();
                 } else {
                     if (isPauseAudioEnabled()) {
                         audioPauser.request(this);
@@ -264,6 +262,89 @@ public class RustInputMethodService extends InputMethodService {
             errorView.setText("Error loading keyboard: " + e.getMessage());
             return errorView;
         }
+    }
+
+    private void deleteBackward() {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic != null) {
+            ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_DEL));
+            ic.sendKeyEvent(new android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_DEL));
+        }
+    }
+
+    private void insertSpace() {
+        InputConnection ic = getCurrentInputConnection();
+        if (ic != null) {
+            ic.commitText(" ", 1);
+        }
+    }
+
+    /**
+     * Stops capture and hands the audio to transcription. Audio focus is
+     * released right away, so paused media can resume while the (possibly
+     * long) transcription runs.
+     */
+    private void finishCapture() {
+        stopRecording();
+        releaseAudioFocus();
+        updateRecordButtonUI(false);
+    }
+
+    private void releaseAudioFocus() {
+        if (pauseAudioActive) {
+            audioPauser.abandon(this);
+            pauseAudioActive = false;
+        }
+    }
+
+    /**
+     * Leaves the voice keyboard. There is no previous keyboard when ours was
+     * picked in the system settings (common on Android TV) or after the input
+     * method history was reset; then fall back to the next enabled keyboard,
+     * and finally to the system picker, so the button never does nothing.
+     */
+    private void switchAwayFromVoiceKeyboard() {
+        if (switchToLastKeyboard() || switchToNextKeyboard()) return;
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) imm.showInputMethodPicker();
+    }
+
+    // InputMethodService#switchToPreviousInputMethod / #switchToNextInputMethod
+    // only exist since API 28; older versions take the window token.
+    @SuppressWarnings("deprecation")
+    private boolean switchToLastKeyboard() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return switchToPreviousInputMethod();
+            }
+            IBinder token = imeWindowToken();
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            return token != null && imm != null && imm.switchToLastInputMethod(token);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "switching to the previous keyboard failed", e);
+            return false;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean switchToNextKeyboard() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return switchToNextInputMethod(false);
+            }
+            IBinder token = imeWindowToken();
+            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            return token != null && imm != null && imm.switchToNextInputMethod(token, false);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "switching to the next keyboard failed", e);
+            return false;
+        }
+    }
+
+    private IBinder imeWindowToken() {
+        android.app.Dialog window = getWindow();
+        if (window == null || window.getWindow() == null) return null;
+        return window.getWindow().getAttributes().token;
     }
 
     @Override
@@ -315,16 +396,25 @@ public class RustInputMethodService extends InputMethodService {
                 return;
             }
         }
-        if (pauseAudioActive) {
-            audioPauser.abandon(this);
-            pauseAudioActive = false;
-        }
+        releaseAudioFocus();
     }
 
     @Override
     public void onStartInput(EditorInfo attribute, boolean restarting) {
         super.onStartInput(attribute, restarting);
-        inputActive = true;
+        inputActive = isTextEditor(attribute);
+    }
+
+    /**
+     * Since Android 11 the keyboard also gets onStartInput for windows without
+     * any text field (e.g. the launcher after pressing Home, or a browser
+     * between page focus changes), with a placeholder EditorInfo. Text
+     * committed there is silently lost, so it doesn't count as an editor.
+     * Terminal-style views that really use TYPE_NULL still have a view id.
+     */
+    private static boolean isTextEditor(EditorInfo info) {
+        return info != null && !(info.inputType == android.text.InputType.TYPE_NULL
+                && info.initialSelStart < 0 && info.fieldId == 0);
     }
 
     @Override
@@ -332,10 +422,16 @@ public class RustInputMethodService extends InputMethodService {
         super.onStartInputView(info, restarting);
         inputActive = true;
         // Rebuild the keyboard if the theme preference changed while this
-        // (long-lived) IME process stayed alive, so it matches the app setting.
+        // (long-lived) keyboard service stayed alive, so it matches the app
+        // setting.
         if (inputView != null
                 && ThemePrefs.isNight(ThemePrefs.wrapForNight(this, ThemePrefs.getMode(this))) != viewIsNight) {
-            setInputView(onCreateInputView());
+            View rebuilt = onCreateInputView();
+            setInputView(rebuilt);
+            // The window already dispatched its insets to the old view; ask
+            // for a new pass so the replacement gets its navigation-bar
+            // padding (otherwise the bottom key row is cut off).
+            rebuilt.requestApplyInsets();
         }
         // A field is focused and the input connection is live again — commit any
         // text that finished transcribing while nothing was focused.
@@ -357,11 +453,11 @@ public class RustInputMethodService extends InputMethodService {
         }
         tintRecordButton(recording);
         if (recording) {
-            statusView.setText("Listening...");
-            hintView.setText("Tap to Stop");
+            statusView.setText(R.string.ime_listening);
+            hintView.setText(R.string.ime_tap_to_stop);
         } else {
-            statusView.setText("Processing...");
-            hintView.setText("Tap to Record");
+            statusView.setText(R.string.voice_processing);
+            hintView.setText(R.string.ime_tap_to_record);
             if (micLevelView != null) micLevelView.setLevel(0f);
         }
     }
@@ -386,16 +482,13 @@ public class RustInputMethodService extends InputMethodService {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        cleanupNative();
-        if (pauseAudioActive) {
-            audioPauser.abandon(this);
-            pauseAudioActive = false;
-        }
+        cleanupNative(this);
+        releaseAudioFocus();
     }
 
     // Native methods
     private native void initNative(RustInputMethodService service);
-    private native void cleanupNative();
+    private native void cleanupNative(RustInputMethodService self);
     private native void startRecording();
     private native void stopRecording();
     private native void cancelRecording();
@@ -408,11 +501,10 @@ public class RustInputMethodService extends InputMethodService {
             updateUiState();
             if (pendingSwitchBack && status.startsWith("Error")) {
                 pendingSwitchBack = false;
-                switchToPreviousInputMethod();
+                switchAwayFromVoiceKeyboard();
             }
-            if (pauseAudioActive && status != null && status.startsWith("Error")) {
-                audioPauser.abandon(this);
-                pauseAudioActive = false;
+            if (status != null && status.startsWith("Error")) {
+                releaseAudioFocus();
             }
         });
     }
@@ -423,15 +515,18 @@ public class RustInputMethodService extends InputMethodService {
         boolean isTranscribing = lastStatus.contains("Transcribing") || lastStatus.contains("Processing");
         boolean isError = lastStatus.startsWith("Error");
         boolean isReady = lastStatus.equals("Ready");
+        boolean noModel = !isRecording && !ModelStore.hasAnyModel(this);
 
         // Don't show internal loading states to the user
         if (statusView != null && !isRecording) {
-            if (isError) {
+            if (isError && !lastStatus.equals(ModelStore.NO_MODEL_STATUS)) {
                 statusView.setText(lastStatus);
             } else if (isTranscribing || isWaiting) {
-                statusView.setText("Processing...");
+                statusView.setText(R.string.voice_processing);
+            } else if (noModel) {
+                statusView.setText(R.string.no_model_title);
             } else {
-                statusView.setText("Tap to Record");
+                statusView.setText(R.string.ime_tap_to_record);
             }
         }
 
@@ -440,15 +535,17 @@ public class RustInputMethodService extends InputMethodService {
             progressBar.setVisibility(View.GONE);
         }
 
-        // Disable button only during transcription/processing/waiting or fatal errors
+        // Disable the button only while busy. After an error it stays usable:
+        // most errors are transient (no audio, storage was full while
+        // extracting the model, mic busy), and the next attempt retries.
         if (recordContainer != null) {
-            boolean disable = isTranscribing || isWaiting || isError;
+            boolean disable = isTranscribing || isWaiting;
             recordContainer.setEnabled(!disable);
             recordContainer.setAlpha(disable ? 0.5f : 1.0f);
         }
 
         if (hintView != null && !isRecording) {
-            hintView.setText("Tap to Record");
+            hintView.setText(noModel ? R.string.ime_no_model_hint : R.string.ime_tap_to_record);
         }
     }
 
@@ -458,14 +555,11 @@ public class RustInputMethodService extends InputMethodService {
             if (text == null || text.trim().isEmpty()) {
                 // Nothing recognized — don't insert a stray space.
                 updateRecordButtonUI(false);
-                if (statusView != null) statusView.setText("Tap to Record");
-                if (pauseAudioActive) {
-                    audioPauser.abandon(this);
-                    pauseAudioActive = false;
-                }
+                if (statusView != null) statusView.setText(R.string.voice_no_speech);
+                releaseAudioFocus();
                 if (pendingSwitchBack) {
                     pendingSwitchBack = false;
-                    switchToPreviousInputMethod();
+                    switchAwayFromVoiceKeyboard();
                 }
                 return;
             }
@@ -480,15 +574,12 @@ public class RustInputMethodService extends InputMethodService {
                 // text until a field is focused again instead of losing it.
                 pendingCommitText = committed;
             }
-            if (pauseAudioActive) {
-                audioPauser.abandon(this);
-                pauseAudioActive = false;
-            }
+            releaseAudioFocus();
             updateRecordButtonUI(false);
-            if (statusView != null) statusView.setText("Tap to Record");
+            if (statusView != null) statusView.setText(R.string.ime_tap_to_record);
             if (pendingSwitchBack) {
                 pendingSwitchBack = false;
-                switchToPreviousInputMethod();
+                switchAwayFromVoiceKeyboard();
             }
         });
     }
@@ -496,13 +587,20 @@ public class RustInputMethodService extends InputMethodService {
     // Commits transcribed text into the active input connection, optionally
     // selecting it afterwards (select_transcription setting).
     private void commitTranscribedText(InputConnection ic, String committed) {
+        // Keep the dictation apart from a word right before the cursor
+        // ("hello wor" + "Weather" must not become "hello worWeather").
+        CharSequence before = ic.getTextBeforeCursor(1, 0);
+        if (before != null && before.length() > 0
+                && !Character.isWhitespace(before.charAt(before.length() - 1))) {
+            committed = " " + committed;
+        }
         ic.commitText(committed, 1);
 
         if (!pendingSwitchBack && new File(getFilesDir(), "select_transcription").exists()) {
             android.view.inputmethod.ExtractedText et = ic.getExtractedText(
                 new android.view.inputmethod.ExtractedTextRequest(), 0);
             if (et != null) {
-                int end = et.selectionStart;
+                int end = et.startOffset + et.selectionStart;
                 int start = end - committed.length();
                 if (start >= 0) {
                     ic.setSelection(start, end);

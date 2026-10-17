@@ -1,5 +1,6 @@
 package dev.notune.transcribe;
 
+import android.os.Build;
 import android.util.Log;
 
 import java.io.IOException;
@@ -24,9 +25,12 @@ final class NativeLibraries {
         }
 
         System.loadLibrary("c++_shared");
-        String backend = supportsDotprodAndFp16()
-                ? "android_transcribe_app_dotprod"
-                : "android_transcribe_app_armv8";
+        String backend = "android_transcribe_app";
+        if ("arm64-v8a".equals(Build.SUPPORTED_ABIS[0])) {
+            backend = supportsDotprodAndFp16()
+                    ? "android_transcribe_app_dotprod"
+                    : "android_transcribe_app_armv8";
+        }
         Log.i(TAG, "Loading native backend: " + backend);
         System.loadLibrary(backend);
         loaded = true;

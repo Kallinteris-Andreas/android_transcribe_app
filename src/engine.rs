@@ -8,8 +8,9 @@
 //! imported one fails to load.
 
 use once_cell::sync::Lazy;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
+use std::time::SystemTime;
 
 use jni::objects::{GlobalRef, JObject};
 use jni::JNIEnv;
@@ -39,6 +40,25 @@ const MAX_RUN_SAMPLES: usize = 60 * 16_000;
 /// quietest point so words aren't cut mid-syllable.
 const SPLIT_SEARCH_SAMPLES: usize = 10 * 16_000;
 
+/// Length of the next piece of `samples` to transcribe in one model run:
+/// everything if it fits, otherwise up to the quietest point near the limit.
+pub fn next_run_len(samples: &[f32]) -> usize {
+    if samples.len() <= MAX_RUN_SAMPLES {
+        samples.len()
+    } else {
+        crate::audio::find_quietest_split(
+            samples,
+            MAX_RUN_SAMPLES - SPLIT_SEARCH_SAMPLES,
+            MAX_RUN_SAMPLES,
+        )
+    }
+}
+
+/// True if `samples` is long enough that [`next_run_len`] would split it.
+pub fn exceeds_one_run(samples: &[f32]) -> bool {
+    samples.len() > MAX_RUN_SAMPLES
+}
+
 /// A loaded transcribe.cpp session plus the options applied to every run.
 pub struct Engine {
     session: transcribe_cpp::Session,
@@ -66,7 +86,11 @@ impl Engine {
         // Translation is gated on the model's capabilities: models without it
         // (e.g. Parakeet) silently keep transcribing, so the setting can stay
         // on while switching models.
-        let task = if translate && model.capabilities().supports_translate {
+        let supports_translate = model
+            .capabilities()
+            .map(|c| c.supports_translate)
+            .unwrap_or(false);
+        let task = if translate && supports_translate {
             transcribe_cpp::Task::Translate
         } else {
             if translate {
@@ -136,15 +160,7 @@ impl Engine {
         let mut text = String::new();
         let mut rest: &[f32] = &samples;
         while !rest.is_empty() {
-            let take = if rest.len() <= MAX_RUN_SAMPLES {
-                rest.len()
-            } else {
-                crate::audio::find_quietest_split(
-                    rest,
-                    MAX_RUN_SAMPLES - SPLIT_SEARCH_SAMPLES,
-                    MAX_RUN_SAMPLES,
-                )
-            };
+            let take = next_run_len(rest);
             let piece = self.run(&rest[..take])?;
             let piece = piece.trim();
             if !piece.is_empty() {
@@ -173,6 +189,14 @@ impl Engine {
             };
             match self.session.run(samples, &opts) {
                 Ok(t) => return Ok(t.text),
+                // Some model families stop a decode that hit its length
+                // budget or started repeating itself; the text up to that
+                // point is still the best answer, so keep it.
+                Err(transcribe_cpp::Error::OutputTruncated { message, partial })
+                | Err(transcribe_cpp::Error::OutputRepetition { message, partial }) => {
+                    log::warn!("decode stopped early ({}); using the partial text", message);
+                    return Ok(partial.map(|t| t.text).unwrap_or_default());
+                }
                 Err(transcribe_cpp::Error::Unsupported(msg)) if self.language.is_some() => {
                     let lang = self.language.take().unwrap();
                     self.language = lang.split_once('-').map(|(primary, _)| primary.to_string());
@@ -192,6 +216,75 @@ impl Engine {
 /// Holds the loaded engine singleton.
 static GLOBAL_ENGINE: Lazy<Mutex<Option<Arc<Mutex<Engine>>>>> =
     Lazy::new(|| Mutex::new(None));
+
+/// The settings the loaded engine was built from, and where they live.
+/// Comparing against the files on disk before transcribing makes any user of
+/// the engine pick up a changed model or language, whichever screen changed
+/// it, instead of keeping the old one until the process dies.
+static LOADED_CONFIG: Lazy<Mutex<Option<(PathBuf, EngineConfig)>>> =
+    Lazy::new(|| Mutex::new(None));
+
+#[derive(Debug, Clone, PartialEq)]
+struct EngineConfig {
+    active_model: Option<String>,
+    /// Size and mtime of the imported model file, so re-importing a file
+    /// under the same name also reloads.
+    model_stamp: Option<(u64, Option<SystemTime>)>,
+    language: Option<String>,
+    translate: bool,
+    threads: Option<i32>,
+}
+
+impl EngineConfig {
+    fn read(files_dir: &Path) -> EngineConfig {
+        let active_model = read_config(&files_dir.join(ACTIVE_MODEL_FILE));
+        let model_stamp = active_model.as_ref().and_then(|name| {
+            let meta = std::fs::metadata(files_dir.join("models").join(name)).ok()?;
+            Some((meta.len(), meta.modified().ok()))
+        });
+        EngineConfig {
+            active_model,
+            model_stamp,
+            // Absent/empty or "auto" = no hint (the model's automatic mode).
+            // A tag the model doesn't know is degraded per run (Engine::run).
+            language: read_config(&files_dir.join(MODEL_LANGUAGE_FILE))
+                .filter(|l| !l.eq_ignore_ascii_case("auto")),
+            translate: files_dir.join(MODEL_TRANSLATE_FILE).exists(),
+            threads: read_config(&files_dir.join(MODEL_THREADS_FILE))
+                .and_then(|s| s.parse::<i32>().ok())
+                .filter(|&n| n > 0),
+        }
+    }
+}
+
+/// True if the model settings changed since the engine was loaded.
+fn config_is_stale() -> bool {
+    match &*LOADED_CONFIG.lock().unwrap() {
+        Some((dir, loaded)) => EngineConfig::read(dir) != *loaded,
+        None => false,
+    }
+}
+
+/// Drops the engine if its settings are outdated, so the next load picks up
+/// the current ones. Re-checked under the load lock, so concurrent callers
+/// don't throw away a load that already uses the new settings.
+fn reset_if_stale() {
+    let (lock, cvar) = &*LOAD_STATE;
+    let mut state = lock.lock().unwrap();
+    while *state == LoadState::Loading {
+        state = cvar.wait(state).unwrap();
+    }
+    if config_is_stale() {
+        log::info!("model settings changed; reloading the engine");
+        *GLOBAL_ENGINE.lock().unwrap() = None;
+        *state = LoadState::Idle;
+    }
+}
+
+/// True if the engine is loaded and matches the current settings.
+pub fn is_current() -> bool {
+    is_engine_loaded() && !config_is_stale()
+}
 
 /// Loading coordination state + condvar for waiters.
 static LOAD_STATE: Lazy<(Mutex<LoadState>, Condvar)> =
@@ -213,13 +306,85 @@ pub fn get_engine() -> Option<Arc<Mutex<Engine>>> {
     GLOBAL_ENGINE.lock().unwrap().clone()
 }
 
+/// Number of voice-input transcriptions (keyboard, popup, speech service,
+/// shared files) waiting for or using the engine. All features share one
+/// engine, which runs one transcription at a time, so live subtitles yield to
+/// these: a subtitle job doesn't start while one is pending, and voice input
+/// waits for at most the subtitle run already in flight.
+static INTERACTIVE: Lazy<(Mutex<usize>, Condvar)> = Lazy::new(|| (Mutex::new(0), Condvar::new()));
+
+struct InteractiveTurn;
+
+impl InteractiveTurn {
+    fn begin() -> InteractiveTurn {
+        *INTERACTIVE.0.lock().unwrap() += 1;
+        InteractiveTurn
+    }
+}
+
+impl Drop for InteractiveTurn {
+    fn drop(&mut self) {
+        let (lock, cvar) = &*INTERACTIVE;
+        let mut pending = lock.lock().unwrap();
+        *pending -= 1;
+        if *pending == 0 {
+            cvar.notify_all();
+        }
+    }
+}
+
+/// Transcribes for someone waiting on the result (voice input, a shared
+/// file, the benchmark): takes precedence over live subtitles.
+pub fn transcribe_shared(engine: &Arc<Mutex<Engine>>, samples: Vec<f32>) -> Result<String, String> {
+    let _turn = InteractiveTurn::begin();
+    transcribe_guarded(engine, samples)
+}
+
+/// [`transcribe_shared`] for a recording or file: long quiet stretches
+/// before and after the speech are left out (see
+/// [`crate::endpoint::speech_range`]).
+pub fn transcribe_speech(engine: &Arc<Mutex<Engine>>, samples: Vec<f32>) -> Result<String, String> {
+    let speech = crate::endpoint::speech_range(&samples);
+    if speech.is_empty() {
+        log::info!("only digital silence recorded; nothing to transcribe");
+        return Ok(String::new());
+    }
+    let samples = if speech.len() < samples.len() {
+        log::info!(
+            "transcribing {:.1}-{:.1}s of {:.1}s (quiet start/end left out)",
+            speech.start as f64 / 16_000.0,
+            speech.end as f64 / 16_000.0,
+            samples.len() as f64 / 16_000.0
+        );
+        samples[speech].to_vec()
+    } else {
+        samples
+    };
+    transcribe_shared(engine, samples)
+}
+
+/// Transcribes live subtitles: waits while voice input needs the engine.
+pub fn transcribe_background(
+    engine: &Arc<Mutex<Engine>>,
+    samples: Vec<f32>,
+) -> Result<String, String> {
+    {
+        let (lock, cvar) = &*INTERACTIVE;
+        let mut pending = lock.lock().unwrap();
+        while *pending > 0 {
+            pending = cvar.wait(pending).unwrap();
+        }
+    }
+    transcribe_guarded(engine, samples)
+}
+
 /// Runs a transcription on the shared engine. Two layers of hardening keep a
 /// single bad run from freezing every later one (the symptom would be an IME
 /// stuck at "Processing" until its process dies, since notify callbacks stop
 /// coming): a panic anywhere in the engine stack is caught and surfaced as a
 /// normal error, and a lock poisoned by an earlier panic is recovered instead
 /// of propagating the poison forever.
-pub fn transcribe_shared(engine: &Arc<Mutex<Engine>>, samples: Vec<f32>) -> Result<String, String> {
+fn transcribe_guarded(engine: &Arc<Mutex<Engine>>, samples: Vec<f32>) -> Result<String, String> {
     let audio_secs = samples.len() as f64 / 16_000.0;
     let started = std::time::Instant::now();
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -295,6 +460,10 @@ pub fn ensure_loaded_from_thread(
             notify_status(&mut env, target_ref.as_obj(), msg);
         }
     };
+
+    if config_is_stale() {
+        reset_if_stale();
+    }
 
     // Fast path: already loaded
     if is_engine_loaded() {
@@ -411,6 +580,11 @@ fn read_config(path: &Path) -> Option<String> {
     }
 }
 
+/// Status reported when there is nothing to load: no imported model is
+/// selected and this build bundles none (F-Droid). The app matches this exact
+/// text (`ModelStore.NO_MODEL_STATUS`) to show its translated hint instead.
+const NO_MODEL_STATUS: &str = "Error: no speech model installed";
+
 /// Performs the model load: the selected imported GGUF if any (falling back
 /// to the bundled model on failure), otherwise the bundled model.
 fn do_load(env: &mut JNIEnv, context: &JObject) -> Result<(), String> {
@@ -419,28 +593,30 @@ fn do_load(env: &mut JNIEnv, context: &JObject) -> Result<(), String> {
         notify_status(env, context, &format!("Error: {}", msg));
         msg
     })?;
-    // Absent/empty or "auto" = no hint (the model's automatic mode). A tag
-    // the model doesn't know is degraded per run — see Engine::run.
-    let language = read_config(&files_dir.join(MODEL_LANGUAGE_FILE))
-        .filter(|l| !l.eq_ignore_ascii_case("auto"));
-    let translate = files_dir.join(MODEL_TRANSLATE_FILE).exists();
-    let threads = read_config(&files_dir.join(MODEL_THREADS_FILE))
-        .and_then(|s| s.parse::<i32>().ok())
-        .filter(|&n| n > 0)
-        .unwrap_or_else(performance_core_count);
+    let config = EngineConfig::read(&files_dir);
+    let language = config.language.clone();
+    let translate = config.translate;
+    let threads = config.threads.unwrap_or_else(performance_core_count);
+    let has_builtin = assets::has_builtin_model(env, context);
 
-    if let Some(name) = read_config(&files_dir.join(ACTIVE_MODEL_FILE)) {
+    if let Some(name) = config.active_model.clone() {
         let path = files_dir.join("models").join(&name);
         notify_status(env, context, &format!("Loading model {}...", name));
         match Engine::load(&path, language.clone(), translate, threads) {
             Ok(engine) => {
                 let status = engine.ready_status;
                 *GLOBAL_ENGINE.lock().unwrap() = Some(Arc::new(Mutex::new(engine)));
+                *LOADED_CONFIG.lock().unwrap() = Some((files_dir, config));
                 notify_status(env, context, status);
                 return Ok(());
             }
             Err(e) => {
                 log::error!("Imported model {} failed to load: {}", path.display(), e);
+                if !has_builtin {
+                    let msg = format!("Error loading {}: {}", name, e);
+                    notify_status(env, context, &msg);
+                    return Err(msg);
+                }
                 notify_status(
                     env,
                     context,
@@ -449,6 +625,11 @@ fn do_load(env: &mut JNIEnv, context: &JObject) -> Result<(), String> {
                 // fall through to the bundled model
             }
         }
+    }
+
+    if !has_builtin {
+        notify_status(env, context, NO_MODEL_STATUS);
+        return Err(NO_MODEL_STATUS.trim_start_matches("Error: ").to_string());
     }
 
     notify_status(env, context, "Checking assets...");
@@ -465,6 +646,7 @@ fn do_load(env: &mut JNIEnv, context: &JObject) -> Result<(), String> {
         Ok(engine) => {
             let status = engine.ready_status;
             *GLOBAL_ENGINE.lock().unwrap() = Some(Arc::new(Mutex::new(engine)));
+            *LOADED_CONFIG.lock().unwrap() = Some((files_dir, config));
             notify_status(env, context, status);
             Ok(())
         }

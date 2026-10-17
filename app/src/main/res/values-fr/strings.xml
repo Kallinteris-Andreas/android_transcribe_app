@@ -9,6 +9,7 @@
 
     <string name="section_subs">Sous-titres en direct</string>
     <string name="desc_subs">Affichez des sous-titres pour tout audio lu sur votre appareil. Après le démarrage, choisissez \'Partager tout l\'écran\' pour de meilleurs résultats.</string>
+    <string name="subs_unsupported">Les sous-titres en direct nécessitent Android 10 ou plus récent : les versions antérieures ne permettent pas de capturer le son des autres applications.</string>
     <string name="btn_subs_start">Démarrer les sous-titres en direct</string>
     <string name="btn_subs_advanced">Ignorer la boîte de dialogue d\'autorisation (avancé)</string>
     <string name="subs_advanced_title">Ignorer la boîte de dialogue de capture d\'écran</string>
@@ -51,10 +52,10 @@
     <string name="model_desc_sensevoice">Anglais, chinois, cantonais, japonais, coréen ; rapide</string>
     <string name="model_desc_whisper_small">99 langues, compact ; traduit vers l\'anglais</string>
     <string name="model_desc_nemotron">40 langues dont chinois, japonais, coréen, arabe, hindi ; avec ponctuation</string>
-    <string name="model_desc_parakeet_v3_q8">Comme le modèle intégré, précision supérieure</string>
+    <string name="model_desc_parakeet_v3_q8">Parakeet TDT 0.6B v3 en précision supérieure</string>
     <string name="model_desc_whisper_turbo">99 langues, le plus précis de cette liste ; ne traduit pas</string>
     <string name="model_desc_browse">Parcourir tous les modèles transcribe.cpp</string>
-    <string name="models_desc">Le modèle intégré fonctionne immédiatement. Vous pouvez aussi importer n\'importe quel modèle GGUF transcribe.cpp téléchargé. L\'application reste entièrement hors ligne ; les téléchargements passent par votre navigateur. Le clavier vocal prend en compte un changement de modèle après son redémarrage.</string>
+    <string name="models_desc">Le modèle intégré fonctionne immédiatement. Vous pouvez aussi importer n\'importe quel modèle GGUF transcribe.cpp téléchargé. L\'application reste entièrement hors ligne ; les téléchargements passent par votre navigateur.</string>
     <string name="models_loading">Chargement du modèle…</string>
     <string name="models_import">Importer un fichier de modèle (.gguf)</string>
     <string name="models_importing">Importation de %1$s…</string>
@@ -69,7 +70,7 @@
     <string name="models_delete">Supprimer le modèle</string>
     <string name="models_delete_confirm">Supprimer %1$s du stockage de l\'application ?</string>
     <string name="models_language_section">Langue</string>
-    <string name="models_language_desc">La langue transmise au modèle. « Automatique » laisse le modèle décider. Si la parole est transcrite dans la mauvaise langue ou le mauvais alphabet, choisissez votre langue explicitement. Les langues non prises en charge par le modèle actif sont ignorées.</string>
+    <string name="models_language_desc">La langue transmise au modèle. « Automatique » laisse le modèle décider. Whisper et les autres modèles auxquels on peut indiquer la langue la respectent ; les modèles Parakeet détectent toujours la langue eux-mêmes et ignorent ce réglage. Les langues non prises en charge par le modèle actif sont ignorées.</string>
     <string name="models_language_auto">Automatique</string>
     <string name="models_language_saved">Langue enregistrée</string>
     <string name="models_translate">Traduire en anglais</string>
@@ -78,6 +79,18 @@
     <string name="models_threads_section">Threads CPU</string>
     <string name="models_threads_desc">Threads utilisés pour la transcription. « Automatique » choisit une valeur adaptée au processeur de cet appareil. Si la transcription est lente, essayez d\'autres valeurs ; plus de threads n\'est pas toujours plus rapide.</string>
     <string name="models_threads_auto">Automatique</string>
+    <!-- No model available (F-Droid builds start without one) -->
+    <string name="no_model_title">Aucun modèle vocal installé</string>
+    <string name="no_model_main">La saisie vocale, les sous-titres en direct et la transcription de fichiers nécessitent un modèle vocal. Touchez « Ajouter un modèle vocal » pour en télécharger un dans votre navigateur et l\'importer.</string>
+    <string name="no_model_steps">1. Touchez « Télécharger le modèle recommandé ». Votre navigateur télécharge Parakeet TDT 0.6B v3 (485 Mo, 25 langues européennes).\n2. Une fois le téléchargement terminé, touchez « Importer un fichier de modèle » ci-dessous et choisissez le fichier .gguf téléchargé (généralement dans Téléchargements).\n\nL\'application elle-même reste hors ligne ; seul votre navigateur télécharge le fichier. Vous pouvez le supprimer des Téléchargements après l\'import.</string>
+    <string name="btn_download_recommended">Télécharger le modèle recommandé (485 Mo)</string>
+    <string name="btn_add_model">Ajouter un modèle vocal</string>
+    <string name="models_desc_no_builtin">Importez n\'importe quel modèle GGUF transcribe.cpp téléchargé. L\'application reste entièrement hors ligne ; les téléchargements passent par votre navigateur.</string>
+    <string name="model_desc_recommended">Recommandé · 25 langues européennes, rapide et précis</string>
+    <string name="voice_status_need_model">Un modèle vocal est nécessaire pour la saisie vocale.</string>
+    <string name="no_model_short">Aucun modèle vocal installé. Ouvrez Offline Voice Input pour en ajouter un.</string>
+    <string name="voice_no_model">Aucun modèle vocal installé pour l\'instant. Touchez ici pour en ajouter un.</string>
+    <string name="ime_no_model_hint">Ouvrez l\'application pour en ajouter un</string>
 
     <string name="section_benchmark">Test de performance</string>
     <string name="desc_benchmark">Mesure la vitesse de transcription du modèle actif sur cet appareil à l\'aide d\'un enregistrement de test en anglais intégré (11 s).</string>
@@ -105,4 +118,38 @@
 
     <string name="voice_help_title">Configuration de la saisie vocale</string>
     <string name="voice_help_body">Comment l\'utiliser\n• Ouvrez n\'importe quelle app et touchez le micro d\'un clavier/d\'une app pris en charge. Un petit panneau apparaît, vous parlez, touchez pour arrêter, et le texte est inséré. (Activez « Arrêt automatique après un silence » dans les paramètres pour qu\'il s\'arrête tout seul.)\n\nQuels claviers ouvrent le panneau vocal\n• Microsoft SwiftKey (non open source) et la recherche vocale des sites web ouvrent le panneau directement.\n• AnySoftKeyboard est la voie open source vers le panneau : sa touche micro l\'ouvre tant qu\'aucun clavier vocal n\'est activé sur votre système.\n\nAutres claviers open source\n• HeliBoard, FlorisBoard, OpenBoard, Fossify Keyboard et Unexpected Keyboard n\'ouvrent pas le panneau : leur touche micro bascule vers le clavier « Offline Voice Input ». Activez-le une fois (voir « Alternative : clavier vocal »), parlez, puis revenez avec sa touche de changement de clavier. FUTO Keyboard embarque sa propre saisie vocale.\n• Gboard n\'utilise que la saisie vocale de Google et ne peut pas du tout utiliser cette app.\n\nSi la saisie vocale de SwiftKey s\'ouvre à la place\n• Paramètres → Saisie riche → désactivez « Saisie vocale multimodale ».\n• Touchez ensuite à nouveau le micro et choisissez « Offline Voice Input ».\n\nSi Android demande quelle app utiliser\n• Choisissez « Offline Voice Input » et touchez « Toujours ».\n\nSi une autre app s\'ouvre toujours\n• Ouvrez Paramètres → Applications → cette app → « Ouvrir par défaut » → Effacer les valeurs par défaut, puis réessayez.</string>
+
+    <!-- Voice panel, keyboard, file transcription and live subtitles -->
+    <string name="voice_listening">Écoute… (touchez pour arrêter)</string>
+    <string name="voice_no_speech">Aucune parole reconnue</string>
+    <string name="voice_processing">Traitement…</string>
+    <string name="voice_need_mic">Autorisation du micro requise.\nAccordez-la dans l\'application.</string>
+    <string name="ime_tap_to_record">Touchez pour enregistrer</string>
+    <string name="ime_tap_to_stop">Touchez pour arrêter</string>
+    <string name="ime_listening">Écoute…</string>
+    <string name="ime_need_mic">Pas d\'autorisation du micro</string>
+    <string name="ime_need_mic_hint">Ouvrez l\'application pour l\'accorder</string>
+    <string name="ime_switch_keyboard">Changer de clavier</string>
+    <string name="ime_space">Espace</string>
+    <string name="ime_enter">Entrée</string>
+    <string name="ime_backspace">Retour arrière</string>
+    <string name="action_close">Fermer</string>
+    <string name="file_preparing">Préparation…</string>
+    <string name="file_decoding">Décodage de l\'audio…</string>
+    <string name="file_transcribing">Transcription…</string>
+    <string name="file_transcribing_progress">Transcription… %1$s / %2$s</string>
+    <string name="file_transcribing_at">Transcription… %1$s</string>
+    <string name="file_copy">Copier dans le presse-papiers</string>
+    <string name="file_copied">Copié dans le presse-papiers</string>
+    <string name="file_copied_auto">Transcription copiée dans le presse-papiers</string>
+    <string name="file_no_audio">Aucun fichier audio reçu</string>
+    <string name="file_decode_error">Impossible de décoder ce fichier audio</string>
+    <string name="file_no_speech">Aucune parole reconnue dans ce fichier</string>
+    <string name="subs_waiting">En attente d\'audio…</string>
+    <string name="subs_notification_title">Sous-titres en direct actifs</string>
+    <string name="subs_notification_text">Sous-titrage du son lu sur cet appareil</string>
+    <string name="subs_stop">Arrêter</string>
+    <string name="subs_grant_overlay">Veuillez autoriser « Afficher par-dessus les autres applis »</string>
+    <string name="subs_overlay_required">Les sous-titres en direct nécessitent l\'autorisation « Afficher par-dessus les autres applis »</string>
+    <string name="subs_capture_denied">La capture d\'écran a été refusée</string>
 </resources>

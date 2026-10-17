@@ -9,6 +9,7 @@
 
     <string name="section_subs">Субтитры в реальном времени</string>
     <string name="desc_subs">Показывайте субтитры для любого аудио, воспроизводимого на устройстве. После запуска выберите \'Демонстрация всего экрана\' для лучших результатов.</string>
+    <string name="subs_unsupported">Живым субтитрам нужен Android 10 или новее: более старые версии не позволяют приложениям записывать звук других приложений.</string>
     <string name="btn_subs_start">Запустить субтитры</string>
     <string name="btn_subs_advanced">Пропустить диалог разрешения (для опытных)</string>
     <string name="subs_advanced_title">Пропустить диалог захвата экрана</string>
@@ -51,10 +52,10 @@
     <string name="model_desc_sensevoice">Английский, китайский, кантонский, японский, корейский; быстрая</string>
     <string name="model_desc_whisper_small">99 языков, компактная; переводит на английский</string>
     <string name="model_desc_nemotron">40 языков, вкл. китайский, японский, корейский, арабский, хинди; с пунктуацией</string>
-    <string name="model_desc_parakeet_v3_q8">Как встроенная модель, но точнее</string>
+    <string name="model_desc_parakeet_v3_q8">Parakeet TDT 0.6B v3 с более высокой точностью</string>
     <string name="model_desc_whisper_turbo">99 языков, самая точная в этом списке; не переводит</string>
     <string name="model_desc_browse">Все модели transcribe.cpp</string>
-    <string name="models_desc">Встроенная модель работает сразу. Вы также можете импортировать любую скачанную модель GGUF для transcribe.cpp. Приложение остаётся полностью офлайн; загрузки выполняются в браузере. Голосовая клавиатура применяет смену модели после перезапуска.</string>
+    <string name="models_desc">Встроенная модель работает сразу. Вы также можете импортировать любую скачанную модель GGUF для transcribe.cpp. Приложение остаётся полностью офлайн; загрузки выполняются в браузере.</string>
     <string name="models_loading">Загрузка модели…</string>
     <string name="models_import">Импортировать файл модели (.gguf)</string>
     <string name="models_importing">Импорт %1$s…</string>
@@ -69,7 +70,7 @@
     <string name="models_delete">Удалить модель</string>
     <string name="models_delete_confirm">Удалить %1$s из хранилища приложения?</string>
     <string name="models_language_section">Язык</string>
-    <string name="models_language_desc">Язык, передаваемый модели. «Автоматически» позволяет модели решать сама. Если речь распознаётся не на том языке или не в том алфавите, выберите язык явно. Языки, не поддерживаемые активной моделью, игнорируются.</string>
+    <string name="models_language_desc">Язык, передаваемый модели. «Автоматически» позволяет модели решать сама. Whisper и другие модели, которым можно задать язык, его учитывают; модели Parakeet всегда определяют язык сами и игнорируют эту настройку. Языки, не поддерживаемые активной моделью, игнорируются.</string>
     <string name="models_language_auto">Автоматически</string>
     <string name="models_language_saved">Язык сохранён</string>
     <string name="models_translate">Переводить на английский</string>
@@ -78,6 +79,18 @@
     <string name="models_threads_section">Потоки ЦП</string>
     <string name="models_threads_desc">Потоки, используемые для распознавания. «Автоматически» подбирает значение под процессор этого устройства. Если распознавание медленное, попробуйте другие значения; больше потоков не всегда быстрее.</string>
     <string name="models_threads_auto">Автоматически</string>
+    <!-- No model available (F-Droid builds start without one) -->
+    <string name="no_model_title">Речевая модель не установлена</string>
+    <string name="no_model_main">Для голосового ввода, субтитров в реальном времени и расшифровки файлов нужна речевая модель. Нажмите «Добавить речевую модель», чтобы скачать её в браузере и импортировать.</string>
+    <string name="no_model_steps">1. Нажмите «Скачать рекомендуемую модель». Браузер скачает Parakeet TDT 0.6B v3 (485 МБ, 25 европейских языков).\n2. Когда загрузка завершится, нажмите «Импортировать файл модели» ниже и выберите скачанный файл .gguf (обычно в папке «Загрузки»).\n\nСамо приложение остаётся офлайн: файл скачивает только браузер. После импорта его можно удалить из загрузок.</string>
+    <string name="btn_download_recommended">Скачать рекомендуемую модель (485 МБ)</string>
+    <string name="btn_add_model">Добавить речевую модель</string>
+    <string name="models_desc_no_builtin">Импортируйте любую скачанную модель GGUF для transcribe.cpp. Приложение остаётся полностью офлайн; загрузки выполняются в браузере.</string>
+    <string name="model_desc_recommended">Рекомендуется · 25 европейских языков, быстрая и точная</string>
+    <string name="voice_status_need_model">Для голосового ввода нужна речевая модель.</string>
+    <string name="no_model_short">Речевая модель не установлена. Откройте Offline Voice Input, чтобы добавить её.</string>
+    <string name="voice_no_model">Речевая модель ещё не установлена. Нажмите здесь, чтобы добавить её.</string>
+    <string name="ime_no_model_hint">Откройте приложение, чтобы добавить её</string>
 
     <string name="section_benchmark">Тест скорости</string>
     <string name="desc_benchmark">Измеряет скорость распознавания активной модели на этом устройстве по встроенной тестовой записи на английском (11 с).</string>
@@ -105,4 +118,38 @@
 
     <string name="voice_help_title">Настройка голосового ввода</string>
     <string name="voice_help_body">Как использовать\n• Откройте любое приложение и нажмите микрофон на поддерживаемой клавиатуре/в приложении. Появится небольшая панель, вы говорите, нажимаете для остановки, и текст вставляется. (Включите «Автостоп при тишине» в настройках, чтобы она останавливалась сама.)\n\nКакие клавиатуры открывают голосовую панель\n• Microsoft SwiftKey (не с открытым кодом) и голосовой поиск на сайтах открывают панель напрямую.\n• AnySoftKeyboard — путь к панели с открытым кодом: его клавиша микрофона открывает её, пока в системе не включена ни одна голосовая клавиатура.\n\nДругие клавиатуры с открытым кодом\n• HeliBoard, FlorisBoard, OpenBoard, Fossify Keyboard и Unexpected Keyboard панель не открывают: их клавиша микрофона переключает на клавиатуру «Offline Voice Input». Включите её один раз (см. «Альтернатива: голосовая клавиатура»), говорите там и возвращайтесь клавишей переключения клавиатур. FUTO Keyboard содержит собственный голосовой ввод.\n• Gboard использует только голосовой ввод Google и вообще не может использовать это приложение.\n\nЕсли открывается собственный голосовой ввод SwiftKey\n• Настройки → Расширенный ввод → отключите «Мультимодальный голосовой ввод».\n• Затем снова нажмите микрофон и выберите «Offline Voice Input».\n\nЕсли Android спрашивает, какое приложение использовать\n• Выберите «Offline Voice Input» и нажмите «Всегда».\n\nЕсли всегда открывается другое приложение\n• Откройте Настройки → Приложения → это приложение → «Открывать по умолчанию» → Очистить настройки по умолчанию, и попробуйте снова.</string>
+
+    <!-- Voice panel, keyboard, file transcription and live subtitles -->
+    <string name="voice_listening">Слушаю… (нажмите, чтобы остановить)</string>
+    <string name="voice_no_speech">Речь не распознана</string>
+    <string name="voice_processing">Обработка…</string>
+    <string name="voice_need_mic">Нужно разрешение на микрофон.\nВыдайте его в приложении.</string>
+    <string name="ime_tap_to_record">Нажмите для записи</string>
+    <string name="ime_tap_to_stop">Нажмите, чтобы остановить</string>
+    <string name="ime_listening">Слушаю…</string>
+    <string name="ime_need_mic">Нет разрешения на микрофон</string>
+    <string name="ime_need_mic_hint">Откройте приложение, чтобы выдать его</string>
+    <string name="ime_switch_keyboard">Сменить клавиатуру</string>
+    <string name="ime_space">Пробел</string>
+    <string name="ime_enter">Ввод</string>
+    <string name="ime_backspace">Удалить</string>
+    <string name="action_close">Закрыть</string>
+    <string name="file_preparing">Подготовка…</string>
+    <string name="file_decoding">Декодирование аудио…</string>
+    <string name="file_transcribing">Распознавание…</string>
+    <string name="file_transcribing_progress">Распознавание… %1$s / %2$s</string>
+    <string name="file_transcribing_at">Распознавание… %1$s</string>
+    <string name="file_copy">Скопировать в буфер обмена</string>
+    <string name="file_copied">Скопировано в буфер обмена</string>
+    <string name="file_copied_auto">Текст скопирован в буфер обмена</string>
+    <string name="file_no_audio">Аудиофайл не получен</string>
+    <string name="file_decode_error">Не удалось декодировать этот аудиофайл</string>
+    <string name="file_no_speech">В этом файле речь не распознана</string>
+    <string name="subs_waiting">Ожидание звука…</string>
+    <string name="subs_notification_title">Живые субтитры включены</string>
+    <string name="subs_notification_text">Субтитры для звука на этом устройстве</string>
+    <string name="subs_stop">Остановить</string>
+    <string name="subs_grant_overlay">Разрешите «Поверх других приложений»</string>
+    <string name="subs_overlay_required">Для живых субтитров нужно разрешение «Поверх других приложений»</string>
+    <string name="subs_capture_denied">Запись экрана запрещена</string>
 </resources>

@@ -29,6 +29,8 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.LinearLayout;
 
+import androidx.annotation.RequiresApi;
+
 public class LiveSubtitleService extends Service {
     private static final String TAG = "LiveSubtitleService";
     public static final String ACTION_START = "dev.notune.transcribe.START_SUBTITLES";
@@ -55,6 +57,11 @@ public class LiveSubtitleService extends Service {
     private TextView mSubtitleText;
     private Handler mMainHandler;
 
+    /** Capturing other apps' audio (AudioPlaybackCapture) needs Android 10. */
+    public static boolean isSupported() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -68,6 +75,10 @@ public class LiveSubtitleService extends Service {
         if (intent == null) return START_NOT_STICKY;
 
         if (ACTION_START.equals(intent.getAction())) {
+            if (!isSupported()) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
             Notification notification = createNotification();
             try {
                 if (Build.VERSION.SDK_INT >= 29) {
@@ -100,6 +111,7 @@ public class LiveSubtitleService extends Service {
         return START_NOT_STICKY;
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private void startSubtitleSession(int code, Intent data) {
         if (isRecording) return;
 
@@ -158,7 +170,7 @@ public class LiveSubtitleService extends Service {
 
         mMaxLines = SubtitlePrefs.getMaxLines(this);
         mSubtitleText = mOverlayView.findViewById(R.id.subs_text);
-        mSubtitleText.setText("Waiting for audio...");
+        mSubtitleText.setText(R.string.subs_waiting);
         
         View closeBtn = mOverlayView.findViewById(R.id.btn_close_subs);
         closeBtn.setOnClickListener(v -> {
@@ -236,6 +248,7 @@ public class LiveSubtitleService extends Service {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private void startAudioCapture() {
         Log.d(TAG, "Starting audio capture. MediaProjection: " + mMediaProjection);
         if (mMediaProjection == null) {
@@ -432,10 +445,10 @@ public class LiveSubtitleService extends Service {
         PendingIntent stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE);
 
         return new Notification.Builder(this, CHANNEL_ID)
-                .setContentTitle("Live Subtitles Active")
-                .setContentText("Recording internal audio...")
+                .setContentTitle(getString(R.string.subs_notification_title))
+                .setContentText(getString(R.string.subs_notification_text))
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                .addAction(new Notification.Action.Builder(null, "Stop", stopPendingIntent).build())
+                .addAction(new Notification.Action.Builder(null, getString(R.string.subs_stop), stopPendingIntent).build())
                 .build();
     }
 
